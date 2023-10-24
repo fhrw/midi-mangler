@@ -20,9 +20,9 @@ main = do
   log $ show $ shr (shl 1 1) 1
   log $ show file
 
-newtype MidiFile = MidiFile { header :: MidiHeader, file :: MidiData }
+-- TYPES --
 
-derive newtype instance Show MidiFile
+newtype MidiFile = MidiFile { header :: MidiHeader, file :: MidiData }
 
 type MidiData = Array Int
 
@@ -30,18 +30,9 @@ type MidiHeader = { format :: MidiFormat, numTracks :: Int, divisionForm :: Divi
 
 data MidiFormat = Type0 | Type1 | Type2
 
-derive instance Generic MidiFormat _
-
-instance Show MidiFormat where
-  show = genericShow
-
 data DivisionForm
   = QuarterTicks Int
   | SmtpeTicks Int Int
-
-instance Show DivisionForm where
-  show (QuarterTicks x) = "QuarterTicks" <> show x
-  show (SmtpeTicks x y) = "SMPTE ticks" <> show x <> show y
 
 openMidiFile :: Effect (Maybe MidiFile)
 openMidiFile = do
@@ -73,12 +64,11 @@ parseMidiDivision bytes = do
   byte2 <- drop 1 bytes # head
   let
     combined = (padEight $ intToBits byte1) <> (padEight $ intToBits byte2) # unsafeBitsToInt
-    combinedShifted = shl combined 1
-    backShift = shr combinedShifted 1
-  if (combined - backShift) == 0 then
+    shifted = shr (shl combined 1) 1
+  if (combined - shifted) == 0 then
     -- this is quarter ticks
     -- 01111111 -> 11111110 -> 01111111
-    Just $ QuarterTicks backShift
+    Just $ QuarterTicks shifted
   else
     -- this is smtpe ticks
     Just $ QuarterTicks 1
@@ -94,3 +84,17 @@ parseMidiFormat bytes = do
       2 -> Just Type2
       _ -> Nothing
     _ -> Nothing
+
+-- INSTANCES
+
+derive newtype instance Show MidiFile
+
+derive instance Generic MidiFormat _
+
+instance Show MidiFormat where
+  show = genericShow
+
+derive instance Generic DivisionForm _
+instance Show DivisionForm where
+  show = genericShow
+
