@@ -17,6 +17,7 @@ to generate this file without the comments in this block.
   , "control"
   , "effect"
   , "integers"
+  , "lists"
   , "maybe"
   , "newtype"
   , "node-buffer"
