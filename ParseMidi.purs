@@ -28,15 +28,55 @@ data MetaEvent
   | EndOfTrack
   | Tempo
   | SmtpeOffset
-  | TimeSig
-  | KeySig
+  | TimeSigEv
+  | KeySigEv
   | SeqSpec
+
+data MidiEvent
+  = NoteOff NoteInfo
+  | NoteOn NoteInfo
+  | PolyKeyPress
+  | CC
+  | ProgChange
+  | AfterTouch
+  | PitchWheel
+  | ChanMode
+
+type NoteInfo =
+  { key :: Int
+  , vel :: Int
+  , chan :: Int
+  }
+
+type CChange =
+  { ctrl :: Int
+  , val :: Int
+  , chan :: Int
+  }
 
 type TimeSig =
   { num :: Int
   , denom :: Int
   , cpc :: Int
   , bb :: Int
+  }
+
+type KeySig =
+  { accidentalType :: Accidental
+  , numAcc :: Int
+  , keyType :: Key
+  }
+
+data Key = Major | Minor
+
+data Accidental = Flats | Sharps
+
+type SmpteOffset =
+  { hr :: Int
+  , mn :: Int
+  , sec :: Int
+  , fr :: Int
+  , fFr :: Int
   }
 
 parseSeqNum :: Array Int -> Maybe (Tuple Int (Array Int))
@@ -98,3 +138,109 @@ parseTimeSig bytes = do
     sig = { num: byte1, denom: byte2, cpc: byte3, bb: byte4 }
   Just $ Tuple sig (drop 4 bytes)
 
+parseSmpteOffset :: Array Int -> Maybe (Tuple SmpteOffset (Array Int))
+parseSmpteOffset bytes = do
+  byte1 <- drop 1 bytes # head
+  byte2 <- drop 2 bytes # head
+  byte3 <- drop 3 bytes # head
+  byte4 <- drop 4 bytes # head
+  byte5 <- drop 5 bytes # head
+  let
+    offset =
+      { hr: byte1
+      , mn: byte2
+      , sec: byte3
+      , fr: byte4
+      , fFr: byte5
+      }
+  Just $ Tuple offset (drop 5 bytes)
+
+parseKeySig :: Array Int -> Maybe (Tuple KeySig (Array Int))
+parseKeySig bytes = do
+  byte1 <- drop 1 bytes # head
+  byte2 <- drop 2 bytes # head
+  let
+    k = case byte1 of
+      -7 -> Just $ Tuple 7 Flats
+      (-6) -> Just $ Tuple 6 Flats
+      (-5) -> Just $ Tuple 5 Flats
+      (-4) -> Just $ Tuple 4 Flats
+      (-3) -> Just $ Tuple 3 Flats
+      (-2) -> Just $ Tuple 2 Flats
+      (-1) -> Just $ Tuple 1 Flats
+      0 -> Just $ Tuple 0 Sharps
+      1 -> Just $ Tuple 1 Sharps
+      2 -> Just $ Tuple 2 Sharps
+      3 -> Just $ Tuple 3 Sharps
+      4 -> Just $ Tuple 4 Sharps
+      5 -> Just $ Tuple 5 Sharps
+      6 -> Just $ Tuple 6 Sharps
+      7 -> Just $ Tuple 7 Sharps
+      _ -> Nothing
+    t = case byte2 of
+      0 -> Just Major
+      1 -> Just Minor
+      _ -> Nothing
+  case k, t of
+    Nothing, _ -> Nothing
+    _, Nothing -> Nothing
+    Just x, Just y -> Just $ Tuple
+      { accidentalType: snd x
+      , numAcc: fst x
+      , keyType: y
+      }
+      (drop 2 bytes)
+
+parseSeqSpec :: Array Int -> Maybe (Array Int)
+parseSeqSpec bytes = do
+  lengthTup <- parseLenBytes 0 bytes
+  let
+    b = snd lengthTup
+  Just b
+
+parseNoteOff :: Array Int -> Maybe (Tuple MidiEvent (Array Int))
+parseNoteOff bytes = do
+  byte1 <- head bytes
+  byte2 <- drop 1 bytes # head
+  byte3 <- drop 2 bytes # head
+  let chan = and 15 byte1
+  Just $ Tuple
+    ( NoteOff
+        { key: byte2
+        , vel: byte3
+        , chan: chan
+        }
+    )
+    (drop 3 bytes)
+
+parseNoteOn :: Array Int -> Maybe (Tuple MidiEvent (Array Int))
+parseNoteOn bytes = do
+  byte1 <- head bytes
+  byte2 <- drop 1 bytes # head
+  byte3 <- drop 2 bytes # head
+  let chan = and 15 byte1
+  Just $ Tuple
+    ( NoteOn
+        { key: byte2
+        , vel: byte3
+        , chan: chan
+        }
+    )
+    (drop 3 bytes)
+
+parsePolyKeyPress :: Array Int -> Tuple MidiEvent (Array Int)
+parsePolyKeyPress bytes =
+  Tuple PolyKeyPress (drop 3 bytes)
+
+parseControlChange :: Array Int -> Tuple MidiEvent (Array Int)
+parseControlChange bytes =
+  Tuple CC (drop 3 bytes)
+
+parseProgChange :: Array Int -> Tuple MidiEvent (Array Int)
+parseProgChange bytes = Tuple ProgChange (drop 2 bytes)
+
+parseChanPress :: Array Int -> Tuple MidiEvent (Array Int)
+parseChanPress bytes = Tuple AfterTouch (drop 2 bytes)
+
+parsePitchWheel :: Array Int -> Tuple MidiEvent (Array Int)
+parsePitchWheel bytes = Tuple PitchWheel (drop 3 bytes)
