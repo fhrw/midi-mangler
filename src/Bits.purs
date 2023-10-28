@@ -1,4 +1,4 @@
-module Bits (Bits(..), Bit(..), intToBits, unsafeBitsToInt, padEight) where
+module Bits (Bits(..), Bit(..), intToBits, unsafeBitsToInt, padEight, combine2) where
 
 import Prelude hiding (zero)
 
@@ -55,3 +55,7 @@ padEight bits =
 
   in
     Bits pad <> bits
+
+combine2 :: Int -> Int -> Int
+combine2 byte1 byte2 =
+  ((intToBits byte1 # padEight) <> (intToBits byte2 # padEight)) # unsafeBitsToInt
