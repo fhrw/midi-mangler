@@ -2,7 +2,7 @@ module ParseMidi where
 
 import Prelude
 
-import Bits (intToBits, padEight, unsafeBitsToInt)
+import Bits (combine2, intToBits, padEight, unsafeBitsToInt)
 import Data.Array (drop, head, mapMaybe, take)
 import Data.Char (fromCharCode)
 import Data.Int.Bits (and)
@@ -16,15 +16,15 @@ data Event
   | MetaEvent
 
 data MetaEvent
-  = SeqNum
-  | Text
+  = SeqNum Int
+  | Text String
   | Copyright
   | TrackName
   | InstName
   | Lyric
   | Marker
   | CuePoint
-  | ChannelPrefix
+  | ChannelPrefix Int
   | EndOfTrack
   | Tempo
   | SmtpeOffset
@@ -79,7 +79,58 @@ type SmpteOffset =
   , fFr :: Int
   }
 
-parseSeqNum :: Array Int -> Maybe (Tuple Int (Array Int))
+parseEvent :: Array Int -> Maybe (Tuple Event (Array Int))
+parseEvent bytes = do
+  byte1 <- head bytes
+  byte2 <- drop 1 bytes # head
+  let
+    combined =
+      ( (intToBits byte1 # padEight)
+          <>
+            ( intToBits byte2
+                # padEight
+            )
+      )
+        # unsafeBitsToInt
+    next = drop 2 bytes
+  case combined of
+    255 -> parseMeta next
+    _ -> Nothing
+
+parseMeta :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
+parseMeta bytes = do
+  byte1 <- head bytes
+  byte2 <- drop 1 bytes # head
+  let
+    combined = combine2 byte1 byte2
+    next = drop 2 bytes
+  case combined of
+    0 -> parseSeqNum next
+    1 -> do
+      t <- parseText next
+      Just $ Tuple (fst t # Text) (snd t)
+    2 -> do
+      t <- parseText next
+      Just $ Tuple (fst t # Text) (snd t)
+    3 -> do
+      t <- parseText next
+      Just $ Tuple (fst t # Text) (snd t)
+    4 -> do
+      t <- parseText next
+      Just $ Tuple (fst t # Text) (snd t)
+    5 -> do
+      t <- parseText next
+      Just $ Tuple (fst t # Text) (snd t)
+    6 -> do
+      t <- parseText next
+      Just $ Tuple (fst t # Text) (snd t)
+    7 -> do
+      t <- parseText next
+      Just $ Tuple (fst t # Text) (snd t)
+    20 -> parseMidiChanPrefix next
+    47 -> Nothing
+
+parseSeqNum :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseSeqNum bytes = do
   byte1 <- head bytes
   byte2 <- drop 1 bytes # head
@@ -87,7 +138,7 @@ parseSeqNum bytes = do
     val = unsafeBitsToInt
       $ (intToBits byte1 # padEight)
           <> (intToBits byte2 # padEight)
-  Just $ Tuple val bytes
+  Just $ Tuple (SeqNum val) bytes
 
 parseLenBytes :: Int -> Array Int -> Maybe (Tuple Int (Array Int))
 parseLenBytes t bytes = do
@@ -110,11 +161,11 @@ parseText bytes = do
       # fromCharArray
   Just $ Tuple text (drop lengthOf newBytes)
 
-parseMidiChanPrefix :: Array Int -> Maybe (Tuple Int (Array Int))
+parseMidiChanPrefix :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseMidiChanPrefix bytes = do
   num <- drop 2 bytes # head
   if num >= 15 && num <= 0 then Nothing
-  else Just $ Tuple num (drop 1 bytes)
+  else Just $ Tuple (ChannelPrefix num) (drop 1 bytes)
 
 parseTempo :: Array Int -> Maybe (Tuple Int (Array Int))
 parseTempo bytes = do
@@ -228,6 +279,9 @@ parseNoteOn bytes = do
     )
     (drop 3 bytes)
 
+-- This is stuff we aren't handling.
+-- We just skip those bytes and return
+-- a new array after!
 parsePolyKeyPress :: Array Int -> Tuple MidiEvent (Array Int)
 parsePolyKeyPress bytes =
   Tuple PolyKeyPress (drop 3 bytes)
@@ -244,3 +298,6 @@ parseChanPress bytes = Tuple AfterTouch (drop 2 bytes)
 
 parsePitchWheel :: Array Int -> Tuple MidiEvent (Array Int)
 parsePitchWheel bytes = Tuple PitchWheel (drop 3 bytes)
+
+parseChanMode :: Array Int -> Tuple MidiEvent (Array Int)
+parseChanMode bytes = Tuple ChanMode (drop 3 bytes)
