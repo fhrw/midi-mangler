@@ -115,6 +115,9 @@ parseMidi bytes = do
         160 -> parsePolyKeyPress bytes # Just
         192 -> parseProgChange bytes # Just
         208 -> parseChanPress bytes # Just
+        224 -> parsePitchWheel bytes # Just
+        176 -> parseChanMode bytes # Just
+        _ -> Nothing
 
 parseMeta :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseMeta bytes = do
