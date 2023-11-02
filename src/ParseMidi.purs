@@ -26,10 +26,10 @@ data MetaEvent
   | CuePoint
   | ChannelPrefix Int
   | EndOfTrack
-  | Tempo
-  | SmtpeOffset
-  | TimeSigEv
-  | KeySigEv
+  | Tempo Int
+  | SmpteOffset SmpteOffsetR
+  | TimeSigEv TimeSig
+  | KeySigEv KeySig
   | SeqSpec
 
 data MidiEvent
@@ -41,6 +41,14 @@ data MidiEvent
   | AfterTouch
   | PitchWheel
   | ChanMode
+
+type SmpteOffsetR =
+  { hr :: Int
+  , mn :: Int
+  , sec :: Int
+  , fr :: Int
+  , fFr :: Int
+  }
 
 type NoteInfo =
   { key :: Int
@@ -92,10 +100,21 @@ parseEvent bytes = do
             )
       )
         # unsafeBitsToInt
-    next = drop 2 bytes
   case combined of
-    255 -> parseMeta next
-    _ -> Nothing
+    255 -> parseMeta (drop 2 bytes)
+    _ -> parseMidi (drop 1 bytes)
+
+parseMidi :: Array Int -> Maybe (Tuple MidiEvent (Array Int))
+parseMidi bytes = do
+    idByte <- head bytes
+    let
+        sig = and 240 idByte
+    case sig of
+        128 -> parseNoteOff bytes
+        144 -> parseNoteOn bytes
+        160 -> parsePolyKeyPress bytes # Just
+        192 -> parseProgChange bytes # Just
+        208 -> parseChanPress bytes # Just
 
 parseMeta :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseMeta bytes = do
@@ -128,7 +147,13 @@ parseMeta bytes = do
       t <- parseText next
       Just $ Tuple (fst t # Text) (snd t)
     20 -> parseMidiChanPrefix next
-    47 -> Nothing
+    47 -> Just $ Tuple EndOfTrack next
+    51 -> parseTempo next
+    54 -> parseSmpteOffset next
+    58 -> parseTimeSig next
+    59 -> parseKeySig next
+    127 -> parseSeqSpec next
+    _ -> Nothing
 
 parseSeqNum :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseSeqNum bytes = do
@@ -167,7 +192,7 @@ parseMidiChanPrefix bytes = do
   if num >= 15 && num <= 0 then Nothing
   else Just $ Tuple (ChannelPrefix num) (drop 1 bytes)
 
-parseTempo :: Array Int -> Maybe (Tuple Int (Array Int))
+parseTempo :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseTempo bytes = do
   byte1 <- drop 1 bytes # head
   byte2 <- drop 2 bytes # head
@@ -177,9 +202,9 @@ parseTempo bytes = do
       (intToBits byte1 # padEight)
         <> (intToBits byte2 # padEight)
         <> (intToBits byte3 # padEight)
-  Just $ Tuple msPerQ (drop 3 bytes)
+  Just $ Tuple (Tempo msPerQ) (drop 3 bytes)
 
-parseTimeSig :: Array Int -> Maybe (Tuple TimeSig (Array Int))
+parseTimeSig :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseTimeSig bytes = do
   byte1 <- drop 1 bytes # head
   byte2 <- drop 2 bytes # head
@@ -187,9 +212,9 @@ parseTimeSig bytes = do
   byte4 <- drop 4 bytes # head
   let
     sig = { num: byte1, denom: byte2, cpc: byte3, bb: byte4 }
-  Just $ Tuple sig (drop 4 bytes)
+  Just $ Tuple (TimeSigEv sig) (drop 4 bytes)
 
-parseSmpteOffset :: Array Int -> Maybe (Tuple SmpteOffset (Array Int))
+parseSmpteOffset :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseSmpteOffset bytes = do
   byte1 <- drop 1 bytes # head
   byte2 <- drop 2 bytes # head
@@ -204,9 +229,9 @@ parseSmpteOffset bytes = do
       , fr: byte4
       , fFr: byte5
       }
-  Just $ Tuple offset (drop 5 bytes)
+  Just $ Tuple (SmpteOffset offset) (drop 5 bytes)
 
-parseKeySig :: Array Int -> Maybe (Tuple KeySig (Array Int))
+parseKeySig :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseKeySig bytes = do
   byte1 <- drop 1 bytes # head
   byte2 <- drop 2 bytes # head
@@ -236,18 +261,20 @@ parseKeySig bytes = do
     Nothing, _ -> Nothing
     _, Nothing -> Nothing
     Just x, Just y -> Just $ Tuple
-      { accidentalType: snd x
-      , numAcc: fst x
-      , keyType: y
-      }
+      ( KeySigEv
+          { accidentalType: snd x
+          , numAcc: fst x
+          , keyType: y
+          }
+      )
       (drop 2 bytes)
 
-parseSeqSpec :: Array Int -> Maybe (Array Int)
+parseSeqSpec :: Array Int -> Maybe (Tuple MetaEvent (Array Int))
 parseSeqSpec bytes = do
   lengthTup <- parseLenBytes 0 bytes
   let
     b = snd lengthTup
-  Just b
+  Just $ Tuple SeqSpec b
 
 parseNoteOff :: Array Int -> Maybe (Tuple MidiEvent (Array Int))
 parseNoteOff bytes = do
