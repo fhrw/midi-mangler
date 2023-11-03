@@ -4,8 +4,10 @@ import Prelude
 
 import Effect (Effect)
 import Effect.Class.Console (log)
+import Test.ParseMidi (majorMidiParseTests, midiParserTests)
 
 main :: Effect Unit
 main = do
-  log "🍝"
-  log "You should add some tests."
+    log "-- Individual Parser Tests --"
+    midiParserTests
+    majorMidiParseTests
