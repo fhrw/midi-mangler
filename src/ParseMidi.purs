@@ -3,10 +3,13 @@ module ParseMidi where
 import Prelude
 
 import Bits (combine2, intToBits, padEight, unsafeBitsToInt)
-import Data.Array (drop, head, mapMaybe, take)
+import Data.Array (drop, head, mapMaybe, snoc, take)
 import Data.Char (fromCharCode)
+import Data.Eq.Generic (genericEq)
+import Data.Generic.Rep (class Generic)
 import Data.Int.Bits (and)
 import Data.Maybe (Maybe(..))
+import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Tuple (Tuple(..), fst, snd)
 
@@ -14,6 +17,7 @@ data Event
   = MidiEvent MidiEvent
   | SysexEvent 
   | MetaEvent MetaEvent
+
 
 data MetaEvent
   = SeqNum Int
@@ -87,6 +91,16 @@ type SmpteOffset =
   , fFr :: Int
   }
 
+parseFile :: Array Int -> Maybe (Array Event)
+parseFile bytes = go {accum: [], remainingBytes: bytes}
+    where
+    go {accum: acc, remainingBytes: []} = Just acc
+    go {accum: acc, remainingBytes: rem} = do
+        nextTup <- parseEvent rem
+        go {accum: snoc acc (fst nextTup), remainingBytes: snd nextTup}
+
+        
+
 parseEvent :: Array Int -> Maybe (Tuple Event (Array Int))
 parseEvent bytes = do
   byte1 <- head bytes
@@ -150,7 +164,7 @@ parseMeta bytes = do
       t <- parseText next
       Just $ Tuple (fst t # Text # MetaEvent ) (snd t)
     20 -> parseMidiChanPrefix next
-    47 -> Just $ Tuple (MetaEvent EndOfTrack) next
+    47 -> Just $ Tuple (MetaEvent EndOfTrack) (drop 2 next)
     51 -> parseTempo next
     54 -> parseSmpteOffset next
     58 -> parseTimeSig next
@@ -331,3 +345,39 @@ parsePitchWheel bytes = Tuple (MidiEvent PitchWheel) (drop 3 bytes)
 
 parseChanMode :: Array Int -> Tuple Event (Array Int)
 parseChanMode bytes = Tuple (MidiEvent ChanMode) (drop 3 bytes)
+
+---------------
+-- INSTANCES --
+---------------
+
+derive instance Generic Event _
+instance Eq Event where
+  eq = genericEq
+instance Show Event where
+  show = genericShow
+
+derive instance Generic MidiEvent _
+instance Eq MidiEvent where
+  eq = genericEq
+instance Show MidiEvent where
+  show = genericShow
+
+derive instance Generic MetaEvent _
+instance Eq MetaEvent where
+  eq = genericEq
+instance Show MetaEvent where
+  show = genericShow
+
+derive instance Generic Key _
+instance Eq Key where
+  eq = genericEq
+instance Show Key where
+  show = genericShow
+
+derive instance Generic Accidental _
+instance Eq Accidental where
+  eq = genericEq
+instance Show Accidental where
+  show = genericShow
+
+

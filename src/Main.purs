@@ -13,6 +13,7 @@ import Effect (Effect)
 import Effect.Console (log)
 import Node.Buffer (toArray)
 import Node.FS.Sync (readFile)
+import ParseMidi (Event, parseFile)
 
 -----------
 -- TYPES --
@@ -90,8 +91,14 @@ data MetaEventType
 
 main :: Effect Unit
 main = do
-  file <- openMidiFile
+  file <- fooOpen
   log $ show file
+
+fooOpen :: Effect (Maybe (Array Event))
+fooOpen = do
+    buf <- readFile "./1m1.mid"
+    arr <- toArray buf
+    pure $ parseFile arr
 
 openMidiFile :: Effect (Maybe MidiFile)
 openMidiFile = do

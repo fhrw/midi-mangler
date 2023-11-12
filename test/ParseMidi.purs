@@ -5,7 +5,7 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import ParseMidi (Event(..), MidiEvent(..), parseMidi, parseNoteOff)
+import ParseMidi (Event(..), HeaderEvent(..), MetaEvent(..), MidiEvent(..), parseEvent, parseHeader, parseLenBytes, parseMidi, parseNoteOff)
 import Test.Unit (suite, test)
 import Test.Unit.Assert as Assert
 import Test.Unit.Main (runTest)
@@ -44,3 +44,23 @@ majorMidiParseTests = do
                     expected = Just $ Tuple (MidiEvent $ PolyKeyPress) [0,0,0]
                     input = [160, 1, 1, 0,0,0]
                 Assert.equal expected (parseMidi input)
+            test "test out parseLenBytes" do
+                let
+                    expected = Just $ Tuple 259 [0,0,0]
+                    input = [129, 129, 1, 0,0,0]
+                Assert.equal expected (parseLenBytes 0 input)
+            test "test parse text event" do
+                let
+                    expected = Just $ Tuple (MetaEvent $ Text "MMM") []
+                    input = [0, 255, 1, 3, 77, 77,77]
+                Assert.equal expected (parseEvent input)
+
+eventParserTests :: Effect Unit
+eventParserTests = do
+    runTest do
+        suite "Event parser Tests" do
+            test "correctly ident track header" do
+                let
+                    expected = Just $ Tuple (HeaderEvent $ File) []
+                    input = [77, 84, 104, 100,0,0, 0, 0]
+                Assert.equal expected (parseEvent input)
