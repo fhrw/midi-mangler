@@ -153,11 +153,9 @@ parseHeader bytes = do
 parseMeta :: Array Int -> Maybe (Tuple Event (Array Int))
 parseMeta bytes = do
   byte1 <- head bytes
-  byte2 <- drop 1 bytes # head
   let
-    combined = combine2 byte1 byte2
-    next = drop 2 bytes
-  case combined of
+    next = drop 1 bytes
+  case byte1 of
     0 -> parseSeqNum next
     1 -> do
       t <- parseText next
