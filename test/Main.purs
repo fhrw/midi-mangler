@@ -4,10 +4,11 @@ import Prelude
 
 import Effect (Effect)
 import Effect.Class.Console (log)
-import Test.ParseMidi (majorMidiParseTests, midiParserTests)
+import Test.ParseMidi (eventParserTests, majorMidiParseTests, midiParserTests)
 
 main :: Effect Unit
 main = do
     log "-- Individual Parser Tests --"
     midiParserTests
     majorMidiParseTests
+    eventParserTests
