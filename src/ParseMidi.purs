@@ -201,7 +201,7 @@ parseLenBytes :: Int -> Array Int -> Maybe (Tuple Int (Array Int))
 parseLenBytes t bytes = do
   byte <- head bytes
   let
-    masked = and 127 byte
+    masked = and 128 byte
   case masked of
     128 -> parseLenBytes (t + byte) (drop 1 bytes)
     _ -> Just $ Tuple (t + byte) (drop 1 bytes)
