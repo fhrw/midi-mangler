@@ -371,6 +371,12 @@ instance Eq Event where
 instance Show Event where
   show = genericShow
 
+derive instance Generic HeaderEvent _
+instance Eq HeaderEvent where
+  eq = genericEq
+instance Show HeaderEvent where
+  show = genericShow
+
 derive instance Generic MidiEvent _
 instance Eq MidiEvent where
   eq = genericEq
