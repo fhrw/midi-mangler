@@ -13,10 +13,15 @@ import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Tuple (Tuple(..), fst, snd)
 
+data HeaderEvent 
+    = File 
+    | Track
+
 data Event
   = MidiEvent MidiEvent
   | SysexEvent 
   | MetaEvent MetaEvent
+  | HeaderEvent HeaderEvent
 
 
 data MetaEvent
@@ -106,17 +111,11 @@ parseEvent bytes = do
   byte1 <- head bytes
   byte2 <- drop 1 bytes # head
   let
-    combined =
-      ( (intToBits byte1 # padEight)
-          <>
-            ( intToBits byte2
-                # padEight
-            )
-      )
-        # unsafeBitsToInt
+    combined = combine2 byte1 byte2
   case combined of
     255 -> parseMeta (drop 2 bytes)
-    _ -> parseMidi (drop 1 bytes)
+    19796 -> parseHeader bytes
+    _ -> parseMidi bytes
 
 parseMidi :: Array Int -> Maybe (Tuple Event (Array Int))
 parseMidi bytes = do
@@ -132,6 +131,24 @@ parseMidi bytes = do
         224 -> parsePitchWheel bytes # Just
         176 -> parseChanMode bytes # Just
         _ -> Nothing
+
+parseHeader :: Array Int -> Maybe (Tuple Event (Array Int)) 
+parseHeader bytes = do
+    byte1 <- head bytes
+    byte2 <- drop 1 bytes # head
+    byte3 <- drop 2 bytes # head
+    byte4 <- drop 3 bytes # head
+    mM <- fromCharCode byte1
+    mT <- fromCharCode byte2
+    m3 <- fromCharCode byte3
+    m4 <- fromCharCode byte4
+    let
+        str = [mM, mT, m3, m4] # fromCharArray
+    case str of
+        "MThd" -> Just $ Tuple (HeaderEvent $ File) (drop 8 bytes)
+        "MTrk" -> Just $ Tuple (HeaderEvent $ Track) (drop 8 bytes)
+        _ -> Nothing
+
 
 parseMeta :: Array Int -> Maybe (Tuple Event (Array Int))
 parseMeta bytes = do
