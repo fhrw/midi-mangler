@@ -4,7 +4,7 @@ import Prelude
 
 import Bits (intToBits, padEight, unsafeBitsToInt)
 import Data.Array (drop, head, slice)
-import Data.Either (Either)
+import Data.Either (Either(..), note)
 import Data.Generic.Rep (class Generic)
 import Data.Int.Bits (shl, shr)
 import Data.List (List, fromFoldable)
@@ -14,7 +14,7 @@ import Effect (Effect)
 import Effect.Console (log)
 import Node.Buffer (toArray)
 import Node.FS.Sync (readFile)
-import ParseMidi (Event, parseFile)
+import ParseMidi (Event)
 
 -----------
 -- TYPES --
@@ -92,14 +92,8 @@ data MetaEventType
 
 main :: Effect Unit
 main = do
-  file <- fooOpen
-  log $ show file
+    log "sdlkfj"
 
-fooOpen :: Effect (Either String (Array Event))
-fooOpen = do
-    buf <- readFile "./1m1.mid"
-    arr <- toArray buf
-    pure $ parseFile arr
 
 openMidiFile :: Effect (Maybe MidiFile)
 openMidiFile = do
