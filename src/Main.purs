@@ -4,6 +4,7 @@ import Prelude
 
 import Bits (intToBits, padEight, unsafeBitsToInt)
 import Data.Array (drop, head, slice)
+import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Int.Bits (shl, shr)
 import Data.List (List, fromFoldable)
@@ -94,7 +95,7 @@ main = do
   file <- fooOpen
   log $ show file
 
-fooOpen :: Effect (Maybe (Array Event))
+fooOpen :: Effect (Either String (Array Event))
 fooOpen = do
     buf <- readFile "./1m1.mid"
     arr <- toArray buf
