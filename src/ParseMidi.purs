@@ -2,10 +2,10 @@ module ParseMidi where
 
 import Prelude
 
-import Bits (combine2)
+import Bits (combine2, combine3)
 import Control.Monad.Rec.Class (Step(..), tailRec)
 import Control.MonadPlus (guard)
-import Data.Array (cons, drop, head, mapMaybe, take, (!!))
+import Data.Array (cons, drop, head, index, mapMaybe, snoc, take, (!!))
 import Data.Array as A
 import Data.Char (fromCharCode)
 import Data.Either (Either(..), note)
@@ -87,12 +87,12 @@ many p = \ints -> tailRec go { acc: [], rem: ints }
     go r =
         case p r.rem of
             Right (Tuple result rest) ->
-                Loop { acc: cons result r.acc, rem: rest }
+                Loop { acc: snoc r.acc result, rem: rest }
             Left _ -> Done $ Right $ Tuple r.acc r.rem
 
 parseTrackEvent :: Parser Event
 parseTrackEvent ints = do
-    Tuple deltaT rest <- parseVarLenNum ints 
+    Tuple deltaT rest <- parseVarLenNum ints
     { head, tail } <- A.uncons rest # note "sldkjfs"
     let deltaTail = cons deltaT tail
     case head of
@@ -116,10 +116,11 @@ parseMeta ints = do
     { head, tail } <- drop 1 ints
         # A.uncons
         # note "parseMeta error"
-    let deltaTail = cons delta tail
     case head of
-        0x00 -> parseSeqNum deltaTail # note "failed to parse sequence number"
-        0x01 -> do 
+        0x00 -> do
+            Tuple seqN rest <- parseSeqNum tail
+            pure $ Tuple (MetaEvent seqN delta) rest
+        0x01 -> do
             Tuple text rest <- parseTextEvent tail
             pure $ Tuple (MetaEvent (Text text) delta) rest
         0x02 -> do
@@ -140,8 +141,16 @@ parseMeta ints = do
         0x07 -> do
             Tuple text rest <- parseTextEvent tail
             pure $ Tuple (MetaEvent (CuePoint text) delta) rest
-        0x20 -> parseChanPrefix deltaTail
-        _ -> Left "dsflkj"
+        0x20 -> do
+            Tuple chan rest <- parseChanPrefix tail
+            pure $ Tuple (MetaEvent chan delta) rest
+        0x2F -> do
+            Tuple end rest <- parseEndOfTrack tail
+            pure $ Tuple (MetaEvent end delta) rest
+        0x51 -> do
+            Tuple tempo rest <- parseTempo tail
+            pure $ Tuple (MetaEvent tempo delta) rest
+        _ -> Left "dsflkj" -- this can be the skip case
 
 parseAfterTouch :: Parser Event
 parseAfterTouch ints = Left "TODO"
@@ -161,68 +170,28 @@ parseNoteOff ints = Left "TODO"
 parseSysEx :: Parser Event
 parseSysEx ints = Left "TODO"
 
-parseChanPrefix :: Parser Event
-parseChanPrefix ints = Left "TODO"
+parseTempo :: Parser MetaEvent
+parseTempo ints = note "parse tempo failed" do
+    {head, tail} <- A.uncons ints
+    guard $ head == 0x03
+    b1 <- index tail 0
+    b2 <- index tail 1
+    b3 <- index tail 2
+    pure $ Tuple (Tempo $ combine3 b1 b2 b3) (drop 3 tail)
 
-parseCuePoint :: Parser Event
-parseCuePoint ints = do
-    { head: delta, tail: rest } <- A.uncons ints # note "parseCuePoint error"
-    Tuple len rest1 <- parseVarLenNum rest
-    let
-        text = take len rest
-            # mapMaybe fromCharCode
-            # fromCharArray
-    pure $ Tuple (MetaEvent (CuePoint text) delta) rest1
 
-parseMarker :: Parser Event
-parseMarker ints = do 
-    { head: delta, tail: rest } <- A.uncons ints # note "parseMarker error"
-    Tuple len rest1 <- parseVarLenNum rest
-    let
-        text = take len rest
-            # mapMaybe fromCharCode
-            # fromCharArray
-    pure $ Tuple (MetaEvent (Marker text) delta) rest1
+parseEndOfTrack :: Parser MetaEvent
+parseEndOfTrack ints = note "parseEOT failed" do
+    {head, tail} <- A.uncons ints
+    guard $ head == 0x00
+    pure $ Tuple (EndOfTrack) tail
 
-parseLyric :: Parser Event
-parseLyric ints = do 
-    { head: delta, tail: rest } <- A.uncons ints # note "parseLyric error"
-    Tuple len rest1 <- parseVarLenNum rest
-    let
-        text = take len rest
-            # mapMaybe fromCharCode
-            # fromCharArray
-    pure $ Tuple (MetaEvent (Lyric text) delta) rest1
-
-parseInstName :: Parser Event
-parseInstName ints = do
-    { head: delta, tail: rest } <- A.uncons ints # note "parseInstName error"
-    Tuple len rest1 <- parseVarLenNum rest
-    let
-        text = take len rest
-            # mapMaybe fromCharCode
-            # fromCharArray
-    pure $ Tuple (MetaEvent (InstName text) delta) rest1
-
-parseTrackName :: Parser Event
-parseTrackName ints = do
-    { head: delta, tail: rest } <- A.uncons ints # note "parseTrackName error"
-    Tuple len rest1 <- parseVarLenNum rest
-    let
-        text = take len rest
-            # mapMaybe fromCharCode
-            # fromCharArray
-    pure $ Tuple (MetaEvent (Copyright text) delta) rest1
-
-parseCopyright :: Parser Event
-parseCopyright ints = do
-    { head: delta, tail: rest } <- A.uncons ints # note "parseCopyright error"
-    Tuple len rest1 <- parseVarLenNum rest
-    let
-        text = take len rest
-            # mapMaybe fromCharCode
-            # fromCharArray
-    pure $ Tuple (MetaEvent (Copyright text) delta) rest1
+parseChanPrefix :: Parser MetaEvent
+parseChanPrefix ints = note "parseChanPrefix failed" do
+    leadByte <- head ints
+    guard $ leadByte == 0x01
+    {head, tail} <- drop 1 ints # A.uncons
+    pure $ Tuple (ChannelPrefix $ head) tail
 
 parseTextEvent :: Parser String
 parseTextEvent ints = do
@@ -233,14 +202,13 @@ parseTextEvent ints = do
             # fromCharArray
     pure $ Tuple (text) (drop len rest)
 
-parseSeqNum :: MParser Event
-parseSeqNum ints = do
-    { head: delta, tail: rest } <- A.uncons ints
-    { head, tail } <- A.uncons rest
+parseSeqNum :: Parser MetaEvent
+parseSeqNum ints = note "parseSeqNum failed" do
+    { head, tail } <- A.uncons ints
     guard $ head == 0x02
     b1 <- tail !! 0
     b2 <- tail !! 1
-    pure $ Tuple (MetaEvent (SeqNum $ combine2 b1 b2) delta) (drop 2 tail)
+    pure $ Tuple (SeqNum $ combine2 b1 b2) (drop 2 tail)
 
 parseFileHeader :: MParser FileHeader
 parseFileHeader ints = do
