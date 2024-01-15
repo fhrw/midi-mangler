@@ -12,20 +12,20 @@ import Data.Either (Either(..), note)
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.Int.Bits (and, or, shl)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Tuple (Tuple(..))
-import Debug (traceM)
+import ParseMidiOld (parsePitchWheel)
 
-type MidiFile = { header :: FileHeader }
+type MidiFile = { header :: FileHeader, tracks :: Array Track }
 
 type FileHeader = { format :: Int, nTracks :: Int, division :: Int }
 type Track = { events :: Array Event }
 
 data Event
     = MidiEvent MidiEvent DeltaTime
-    | SysexEvent
+    | SysexEvent Int
     | MetaEvent MetaEvent DeltaTime
 
 data MetaEvent
@@ -44,15 +44,16 @@ data MetaEvent
     | TimeSigEv TimeSig
     | KeySigEv KeySig
     | SeqSpec
+    | UnknownMeta
 
 data MidiEvent
     = NoteOff NoteInfo
     | NoteOn NoteInfo
     | PolyKeyPress
-    | CC
+    | CC CChange
     | ProgChange
     | AfterTouch
-    | PitchWheel
+    | PitchWheel PitchWheelChange
     | ChanMode
 
 type DeltaTime = Int
@@ -64,9 +65,11 @@ data Accidental = Flats | Sharps
 type Parser a = Array Int -> Either String (Tuple a (Array Int))
 type MParser m = Array Int -> Maybe (Tuple m (Array Int))
 
--- parseFile :: Parser MidiFile
--- parseFile ints = do
---    header <- parseFileHeader ints
+parseFile :: Parser MidiFile
+parseFile ints = do
+    Tuple header rest <- parseFileHeader ints # note "failed to parse file header"
+    Tuple tracks rest2 <- many parseTrack rest
+    pure $ Tuple { header, tracks } rest2
 
 parseTrack :: Parser Track
 parseTrack ints = do
@@ -98,17 +101,27 @@ parseTrackEvent ints = do
     case head of
         255 -> parseMeta deltaTail
         240 -> parseSysEx tail
-        oth ->
-            let
-                masked = and 240 oth
-            in
-                case masked of
-                    128 -> parseNoteOff tail
-                    144 -> parseNoteOn tail
-                    160 -> parseAfterTouch tail
-                    176 -> parseCC tail
-                    224 -> parsePitchwheel tail
-                    _ -> Left "parseTrackEvent fail"
+        _ -> parseMidi ints
+
+parseMidi :: Parser Event
+parseMidi ints = do
+    Tuple delta rest <- parseVarLenNum ints
+    lead <- head rest # note "parseMidi error getting leader byte"
+    let mask = and 240 lead
+    case mask of
+        128 -> do
+            Tuple off rest1 <- parseNoteOff rest
+            pure $ Tuple (MidiEvent off delta) rest1
+        144 -> do
+            Tuple on rest1 <- parseNoteOn rest
+            pure $ Tuple (MidiEvent on delta) rest1
+        176 -> do
+            Tuple cc rest1 <- parseCC rest
+            pure $ Tuple (MidiEvent cc delta) rest1
+        224 -> do
+            Tuple pitchWheel rest1 <- parsePitchwheel rest
+            pure $ Tuple (MidiEvent pitchWheel delta) rest1
+        _ -> Left "illegal unspecified midi event"
 
 parseMeta :: Parser Event
 parseMeta ints = do
@@ -150,39 +163,115 @@ parseMeta ints = do
         0x51 -> do
             Tuple tempo rest <- parseTempo tail
             pure $ Tuple (MetaEvent tempo delta) rest
-        _ -> Left "dsflkj" -- this can be the skip case
+        0x54 -> do
+            Tuple offset rest <- parseSMTPEOffset tail
+            pure $ Tuple (MetaEvent offset delta) rest
+        0x058 -> do
+            Tuple sig rest <- parseTimeSig tail
+            pure $ Tuple (MetaEvent sig delta) rest
+        0x058 -> do
+            Tuple sig rest <- parseKeySig tail
+            pure $ Tuple (MetaEvent sig delta) rest
+        0x7F -> do
+            Tuple seqspec rest <- parseSeqSpec tail
+            pure $ Tuple (MetaEvent seqspec delta) rest
+        _ -> do
+            Tuple unknown rest <- parseUnknown tail
+            pure $ Tuple (MetaEvent unknown delta) rest
+
+parseUnknown :: Parser MetaEvent
+parseUnknown ints = do
+    Tuple len rest <- parseVarLenNum ints
+    pure $ Tuple (UnknownMeta) (drop len rest)
 
 parseAfterTouch :: Parser Event
 parseAfterTouch ints = Left "TODO"
 
-parseCC :: Parser Event
-parseCC ints = Left "TODO"
+parseCC :: Parser MidiEvent
+parseCC ints = note "parseCC failed" do
+    b1 <- index ints 0
+    let chan = and 15 b1
+    ctrl <- index ints 1
+    val <- index ints 2
+    pure $ Tuple (CC { chan, ctrl, val }) (drop 3 ints)
 
-parsePitchwheel :: Parser Event
-parsePitchwheel ints = Left "TODO"
+parsePitchwheel :: Parser MidiEvent
+parsePitchwheel ints = note "parsePitch failed" do
+        b1 <- index ints 0
+        let chan = and 15 b1
+        least <- index ints 1
+        most <- index ints 2
+        pure $ Tuple (PitchWheel {chan, pos: (combine2 most least)}) (drop 3 ints)
 
-parseNoteOn :: Parser Event
-parseNoteOn ints = Left "TODO"
+parseNoteOn :: Parser MidiEvent
+parseNoteOn ints = note "parseNoteOn failed" do
+    b1 <- index ints 0
+    let chan = and 15 b1
+    key <- index ints 1
+    vel <- index ints 2
+    pure $ Tuple (NoteOn { chan, key, vel }) (drop 3 ints)
 
-parseNoteOff :: Parser Event
-parseNoteOff ints = Left "TODO"
+parseNoteOff :: Parser MidiEvent
+parseNoteOff ints = note "parseNoteOff failed" do
+    b1 <- index ints 0
+    let chan = and 15 b1
+    key <- index ints 1
+    vel <- index ints 2
+    pure $ Tuple (NoteOff { chan, key, vel }) (drop 3 ints)
 
 parseSysEx :: Parser Event
-parseSysEx ints = Left "TODO"
+parseSysEx ints = do
+    Tuple len rest <- parseVarLenNum ints
+    pure $ Tuple (SysexEvent len) (drop len rest)
+
+parseSeqSpec :: Parser MetaEvent
+parseSeqSpec ints = do
+    Tuple len rest <- parseVarLenNum ints
+    pure $ Tuple (SeqSpec) (drop len rest)
+
+parseKeySig :: Parser MetaEvent
+parseKeySig ints = note "parseKeySig failed" do
+    { head, tail } <- A.uncons ints
+    guard $ head == 0x02
+    sf <- index tail 0
+    mi <- index tail 1
+    guard $ (sf >= -7 && sf <= 7)
+    guard $ (mi == 1 || mi == 0)
+    pure $ Tuple (KeySigEv { sf, mi }) tail
+
+parseTimeSig :: Parser MetaEvent
+parseTimeSig ints = note "parseTimeSigFailed" do
+    { head, tail } <- A.uncons ints
+    guard $ head == 0x04
+    nn <- index tail 0
+    dd <- index tail 1
+    cc <- index tail 2
+    bb <- index tail 3
+    pure $ Tuple (TimeSigEv { nn, dd, cc, bb }) (drop 4 tail)
+
+parseSMTPEOffset :: Parser MetaEvent
+parseSMTPEOffset ints = note "parseSMTPEOffset failed" do
+    { head, tail } <- A.uncons ints
+    guard $ head == 0x05
+    hr <- index tail 0
+    mn <- index tail 1
+    sec <- index tail 2
+    fr <- index tail 3
+    fFr <- index tail 4
+    pure $ Tuple (SmpteOffset { hr, mn, sec, fr, fFr }) (drop 5 tail)
 
 parseTempo :: Parser MetaEvent
 parseTempo ints = note "parse tempo failed" do
-    {head, tail} <- A.uncons ints
+    { head, tail } <- A.uncons ints
     guard $ head == 0x03
     b1 <- index tail 0
     b2 <- index tail 1
     b3 <- index tail 2
     pure $ Tuple (Tempo $ combine3 b1 b2 b3) (drop 3 tail)
 
-
 parseEndOfTrack :: Parser MetaEvent
 parseEndOfTrack ints = note "parseEOT failed" do
-    {head, tail} <- A.uncons ints
+    { head, tail } <- A.uncons ints
     guard $ head == 0x00
     pure $ Tuple (EndOfTrack) tail
 
@@ -190,7 +279,7 @@ parseChanPrefix :: Parser MetaEvent
 parseChanPrefix ints = note "parseChanPrefix failed" do
     leadByte <- head ints
     guard $ leadByte == 0x01
-    {head, tail} <- drop 1 ints # A.uncons
+    { head, tail } <- drop 1 ints # A.uncons
     pure $ Tuple (ChannelPrefix $ head) tail
 
 parseTextEvent :: Parser String
@@ -311,16 +400,19 @@ type CChange =
     , chan :: Int
     }
 
+type PitchWheelChange =
+        { chan :: Int
+        , pos :: Int}
+
 type TimeSig =
-    { num :: Int
-    , denom :: Int
-    , cpc :: Int
+    { nn :: Int
+    , dd :: Int
+    , cc :: Int
     , bb :: Int
     }
 
 type KeySig =
-    { accidentalType :: Accidental
-    , numAcc :: Int
-    , keyType :: Key
+    { sf :: Int
+    , mi :: Int
     }
 
