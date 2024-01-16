@@ -2,33 +2,60 @@ module Main where
 
 import Prelude
 
+import Data.Maybe (Maybe(..), maybe)
 import Effect (Effect)
-import Effect.Console (log)
+import Effect.Class (class MonadEffect)
+import Halogen as H
+import Halogen.Aff (awaitBody, runHalogenAff)
+import Halogen.HTML as HH
+import Halogen.HTML.Events as HE
+import Halogen.VDom.Driver (runUI)
 import Node.Buffer (toArray)
 import Node.FS.Sync (readFile)
-import ParseMidi (many, parseFile, parseMidi, parseTrack)
+import ParseMidi (parseFile)
+
+type State = Maybe String
+
+data Action = GodSpeed
 
 main :: Effect Unit
-main = do
-    buf <- readFile "./1m1.mid"
-    arr <- toArray buf
-    let
-        trackHeader = [ 77, 84, 114, 107, 0, 0, 0, 0 ]
-        someText = [ 0, 0xFF, 0x01, 3, 77, 77, 77 ]
-        seqNum = [ 0, 0xFF, 0x00, 0x02, 0, 1 ]
-        chanPre = [ 0, 0xFF, 0x20, 0x01, 12 ]
-        eot = [ 0, 0xFF, 0x2F, 0x00 ]
-        tempo = [ 0, 0xFF, 0x51, 0x03, 0, 0, 64 ]
-        soff = [ 0, 0xFF, 0x54, 0x05, 1, 1, 1, 0, 0 ]
-        timeSig = [ 0, 0xFF, 0x58, 0x04, 4, 4, 0, 0 ]
-        new = [ 0, 0xFF, 0x90, 0x05, 0, 0, 0, 0, 0 ]
-        seqspec = [ 0, 0xFF, 0x7F, 1, 0 ]
-        sys = [ 0, 0xF0, 3, 43, 12, 0 ]
-        noteOff = [ 0, 129, 127, 127 ]
-        noteOn = [ 0, 145, 0, 64 ]
-        cc = [ 0, 176, 1, 64, 64 ]
-        mock = trackHeader <> cc
-    log $ show $ parseFile arr
---    log $ show $ parseMidi mock
---    log $ show $ many parseTrack mock
+main = runHalogenAff do
+  body <- awaitBody
+  runUI component unit body
+
+component :: forall query input output m. MonadEffect m => H.Component query input output m
+component =
+  H.mkComponent
+    { initialState
+    , render
+    , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
+    }
+
+initialState :: forall input. input -> State
+initialState _ = Nothing
+
+render :: forall m. State -> H.ComponentHTML Action () m
+render state = do
+        let val = maybe "file not opened yet" show state
+        HH.div_
+                [ HH.h1_
+                        [HH.text "MIDI Mangler"]        
+                , HH.p_
+                        [ HH.text ("file date: " <> val)]
+                , HH.button
+                        [HE.onClick \_ -> GodSpeed ]
+                        [ HH.text "Open file"]
+                ]
+
+handleAction :: forall output m. MonadEffect m => Action -> H.HalogenM State Action () output m Unit
+handleAction = case _ of
+        GodSpeed -> do
+                file <- H.liftEffect openMidi
+                H.modify_ \_ -> Just file
+
+openMidi :: Effect String
+openMidi = do
+        buf <- readFile "./1m1.mid"
+        arr <- toArray buf
+        pure $ show $ parseFile arr
 
