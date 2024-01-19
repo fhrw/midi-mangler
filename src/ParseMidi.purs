@@ -11,8 +11,10 @@ import Data.Char (fromCharCode)
 import Data.Either (Either(..), note)
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
+import Data.Int (fromNumber, toNumber)
 import Data.Int.Bits (and, or, shl)
 import Data.Maybe (Maybe)
+import Data.Number (pow)
 import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Tuple (Tuple(..))
@@ -246,7 +248,16 @@ parseTimeSig ints = note "parseTimeSigFailed" do
     dd <- index tail 1
     cc <- index tail 2
     bb <- index tail 3
-    pure $ Tuple (TimeSigEv { nn, dd, cc, bb }) (drop 4 tail)
+    denom <- pow (toNumber dd) (-2.0) # div 1.0 # fromNumber
+    pure $ Tuple
+        ( TimeSigEv
+              { nn
+              , dd: denom
+              , cc
+              , bb
+              }
+        )
+        (drop 4 tail)
 
 parseSMTPEOffset :: Parser MetaEvent
 parseSMTPEOffset ints = note "parseSMTPEOffset failed" do
