@@ -12,10 +12,12 @@ to generate this file without the comments in this block.
 -}
 { name = "my-project"
 , dependencies =
-  [ "arrays"
+  [ "aff"
+  , "arrays"
   , "console"
   , "control"
   , "debug"
+  , "dom-indexed"
   , "effect"
   , "either"
   , "halogen"
@@ -25,11 +27,13 @@ to generate this file without the comments in this block.
   , "newtype"
   , "node-buffer"
   , "node-fs"
+  , "numbers"
   , "prelude"
   , "strings"
   , "tailrec"
   , "test-unit"
   , "tuples"
+  , "web-events"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
