@@ -2,6 +2,7 @@
   "private": true,
   "devDependencies": {
     "buffer": "^5.5.0||^6.0.0",
+    "esbuild": "^0.19.11",
     "parcel": "2.7.0",
     "process": "^0.11.10",
     "purescript": "^0.15.4",
@@ -11,7 +12,7 @@
   "scripts": {
     "build": "spago build",
     "test": "spago test",
-    "serve": "parcel dev/index.html --open",
+    "serve": "esbuild --bundle --outfile=dev/index.js --watch index.js",
     "build-prod": "rm -rf prod && mkdir -p prod && cp dev/index.html prod/ && spago bundle-app --to prod/index.js && parcel build prod/index.html"
   }
 }
