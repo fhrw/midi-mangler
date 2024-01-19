@@ -16,7 +16,6 @@ import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Tuple (Tuple(..))
-import ParseMidiOld (parsePitchWheel)
 
 type MidiFile = { header :: FileHeader, tracks :: Array Track }
 
@@ -197,11 +196,11 @@ parseCC ints = note "parseCC failed" do
 
 parsePitchwheel :: Parser MidiEvent
 parsePitchwheel ints = note "parsePitch failed" do
-        b1 <- index ints 0
-        let chan = and 15 b1
-        least <- index ints 1
-        most <- index ints 2
-        pure $ Tuple (PitchWheel {chan, pos: (combine2 most least)}) (drop 3 ints)
+    b1 <- index ints 0
+    let chan = and 15 b1
+    least <- index ints 1
+    most <- index ints 2
+    pure $ Tuple (PitchWheel { chan, pos: (combine2 most least) }) (drop 3 ints)
 
 parseNoteOn :: Parser MidiEvent
 parseNoteOn ints = note "parseNoteOn failed" do
@@ -401,8 +400,9 @@ type CChange =
     }
 
 type PitchWheelChange =
-        { chan :: Int
-        , pos :: Int}
+    { chan :: Int
+    , pos :: Int
+    }
 
 type TimeSig =
     { nn :: Int
