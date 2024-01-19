@@ -19,8 +19,9 @@ import Halogen.VDom.Driver (runUI)
 import ParseMidi (MidiFile, parseFile)
 import Web.Event.Event (Event)
 
-type State = { mMidiFile :: Maybe MidiFile
-             }
+type State =
+    { mMidiFile :: Maybe MidiFile
+    }
 
 data Action = GodSpeed Event
 
@@ -38,7 +39,11 @@ component =
         }
 
 initialState :: forall input. input -> State
-initialState _ = { mMidiFile: Nothing}
+initialState _ = { mMidiFile: Nothing }
+
+----------
+-- VIEW --
+----------
 
 render :: forall m. State -> H.ComponentHTML Action () m
 render state = do
@@ -46,11 +51,11 @@ render state = do
         [ HH.h1_
               [ HH.text "MIDI Mangler" ]
         , HH.p_
-              [ HH.text
-                    $ case state.mMidiFile of
-                          Nothing -> ""
-                          Just _ -> "Loaded file"
+              [ HH.text $ case state.mMidiFile of
+                    Nothing -> ""
+                    Just _ -> "Loaded"
               ]
+        , foo state
         , HH.form_
               [ HH.input
                     [ HP.type_ HP.InputFile
@@ -59,6 +64,18 @@ render state = do
                     ]
               ]
         ]
+
+foo :: forall m. State -> H.ComponentHTML Action () m
+foo st = do
+    case st.mMidiFile of
+        Nothing -> HH.p_ [ HH.text "" ]
+        Just file -> HH.div_
+            [ HH.p_ [ HH.text $ show file.header ]
+            ]
+
+----------
+-- EVAL --
+----------
 
 handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
 handleAction = case _ of
@@ -70,12 +87,12 @@ handleAction = case _ of
                   , nothing: Nothing
                   , event
                   }
-        let res = parseFile $ fromMaybe [] mFile
-        case res of
-                Left _ -> pure unit
-                Right (Tuple midi _) -> do 
-                        log $ show midi
-                        H.modify_ \st -> st {mMidiFile = Just midi}
+        let parsed = parseFile $ fromMaybe [] mFile
+        case parsed of
+            Left _ -> pure unit
+            Right (Tuple midi _) -> do
+                log $ show midi
+                H.modify_ \st -> st { mMidiFile = Just midi }
 
 foreign import readFileFromFilePickEvent
     :: { just :: forall a. a -> Maybe a
