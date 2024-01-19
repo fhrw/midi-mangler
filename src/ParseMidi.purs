@@ -53,7 +53,7 @@ data MidiEvent
     | PolyKeyPress
     | CC CChange
     | ProgChange
-    | AfterTouch
+    | AfterTouch AfterTouchVal
     | PitchWheel PitchWheelChange
     | ChanMode
 
@@ -119,6 +119,9 @@ parseMidi ints = do
         176 -> do
             Tuple cc rest1 <- parseCC rest
             pure $ Tuple (MidiEvent cc delta) rest1
+        208 -> do
+            Tuple afterT rest1 <- parseAfterTouch rest
+            pure $ Tuple (MidiEvent afterT delta) rest1
         224 -> do
             Tuple pitchWheel rest1 <- parsePitchwheel rest
             pure $ Tuple (MidiEvent pitchWheel delta) rest1
@@ -185,8 +188,12 @@ parseUnknown ints = do
     Tuple len rest <- parseVarLenNum ints
     pure $ Tuple (UnknownMeta) (drop len rest)
 
-parseAfterTouch :: Parser Event
-parseAfterTouch ints = Left "TODO"
+parseAfterTouch :: Parser MidiEvent
+parseAfterTouch ints = note "parseAfterTouch failed" do
+    b1 <- index ints 0
+    let chan = and 15 b1
+    val <- index ints 1
+    pure $ Tuple (AfterTouch {chan, val}) (drop 2 ints)
 
 parseCC :: Parser MidiEvent
 parseCC ints = note "parseCC failed" do
@@ -413,6 +420,11 @@ type CChange =
 type PitchWheelChange =
     { chan :: Int
     , pos :: Int
+    }
+
+type AfterTouchVal = 
+    {chan :: Int
+    , val :: Int
     }
 
 type TimeSig =
