@@ -3,6 +3,7 @@ module Main where
 import Prelude
 
 import DOM.HTML.Indexed.InputAcceptType (InputAcceptType(..), InputAcceptTypeAtom(..))
+import Data.Array as A
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple (Tuple(..))
@@ -16,7 +17,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import ParseMidi (MidiFile, parseFile)
+import ParseMidi (MidiFile, parseFile, trackName, trackNotes)
 import Web.Event.Event (Event)
 
 type State =
@@ -50,11 +51,6 @@ render state = do
     HH.div_
         [ HH.h1_
               [ HH.text "MIDI Mangler" ]
-        , HH.p_
-              [ HH.text $ case state.mMidiFile of
-                    Nothing -> ""
-                    Just _ -> "Loaded"
-              ]
         , foo state
         , HH.form_
               [ HH.input
@@ -70,7 +66,19 @@ foo st = do
     case st.mMidiFile of
         Nothing -> HH.p_ [ HH.text "" ]
         Just file -> HH.div_
-            [ HH.p_ [ HH.text $ show file.header ]
+            [ HH.p_
+                  [ HH.text $ fromMaybe "" do
+                        track <- A.index file.tracks 0
+                        name <- trackName track
+                        pure name
+                  ]
+            , HH.p_ [ HH.text $ show file.header ]
+            , HH.p_
+                [ HH.text $ fromMaybe "" do 
+                    track <- A.index file.tracks 1
+                    let notes = trackNotes track
+                    pure $ show notes
+                ]
             ]
 
 ----------
@@ -90,8 +98,9 @@ handleAction = case _ of
         let parsed = parseFile $ fromMaybe [] mFile
         case parsed of
             Left _ -> pure unit
-            Right (Tuple midi _) -> do
+            Right (Tuple midi rem) -> do
                 log $ show midi
+                log $ show rem
                 H.modify_ \st -> st { mMidiFile = Just midi }
 
 foreign import readFileFromFilePickEvent
