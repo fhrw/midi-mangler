@@ -5,7 +5,7 @@ import Prelude
 import Bits (combine2, combine3)
 import Control.Monad.Rec.Class (Step(..), tailRec)
 import Control.MonadPlus (guard)
-import Data.Array (cons, drop, head, index, mapMaybe, snoc, take, (!!))
+import Data.Array (cons, drop, head, index, mapMaybe, snoc, take, zip, (!!))
 import Data.Array as A
 import Data.Char (fromCharCode)
 import Data.Either (Either(..), note)
@@ -13,11 +13,80 @@ import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.Int (fromNumber, toNumber)
 import Data.Int.Bits (and, or, shl)
-import Data.Maybe (Maybe)
+import Data.Map as M
+import Data.Map as Map
+import Data.Maybe (Maybe(..))
 import Data.Number (pow)
+import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Tuple (Tuple(..))
+import Record (merge)
+
+----------------
+-- EVALUATION --
+----------------
+
+trackName :: Track -> Maybe String
+trackName track = do
+    let
+        f :: Event -> Maybe String
+        f (MetaEvent (TrackName str) _) = pure str
+        f _ = Nothing
+        arr = A.filter
+            ( \e ->
+                  case e of
+                      MetaEvent (TrackName _) _ -> true
+                      _ -> false
+            )
+            track.events
+    name <- A.index arr 0
+    str <- f name
+    pure str
+
+type Note = { on :: Int, off :: Int, key :: Int, vel :: Int, chan :: Int }
+
+trackNotes :: Track -> Array Note
+trackNotes track =
+    let
+        notes = A.foldl
+            ( \z e ->
+                  let
+                      newZ = z { curTime = z.curTime + eventDelta e }
+                  in
+                      case e of
+                          MidiEvent (NoteOn r) _ ->
+                              let key = {key: r.key, chan: r.chan} in
+                              if M.member key z.q then newZ
+                              else newZ { q = M.insert key {on: newZ.curTime, vel: r.vel} newZ.q }
+                          MidiEvent (NoteOff r) _ ->
+                              let
+                                  key = {key: r.key, chan: r.chan}
+                                  on = M.lookup key newZ.q
+                              in
+                                  case on of
+                                      Nothing -> newZ
+                                      Just val -> newZ
+                                          { q = M.delete key newZ.q
+                                          , notes = A.snoc newZ.notes {on: val.on, off: newZ.curTime, key: key.key, chan: key.chan, vel: val.vel} 
+                                          }
+                          _ -> z { curTime = z.curTime + (eventDelta e) }
+            )
+            { q: M.empty
+            , curTime: 0
+            , notes: []
+            }
+            track.events
+    in
+        notes.notes
+    where
+    eventDelta :: Event -> DeltaTime
+    eventDelta (MidiEvent (_) d) = d
+    eventDelta (MetaEvent (_) d) = d
+
+-------------
+-- PARSING --
+-------------
 
 type MidiFile = { header :: FileHeader, tracks :: Array Track }
 
@@ -26,7 +95,6 @@ type Track = { events :: Array Event }
 
 data Event
     = MidiEvent MidiEvent DeltaTime
-    | SysexEvent Int
     | MetaEvent MetaEvent DeltaTime
 
 data MetaEvent
@@ -101,7 +169,7 @@ parseTrackEvent ints = do
     let deltaTail = cons deltaT tail
     case head of
         255 -> parseMeta deltaTail
-        240 -> parseSysEx tail
+        -- 240 -> parseSysEx tail
         _ -> parseMidi ints
 
 parseMidi :: Parser Event
@@ -193,7 +261,7 @@ parseAfterTouch ints = note "parseAfterTouch failed" do
     b1 <- index ints 0
     let chan = and 15 b1
     val <- index ints 1
-    pure $ Tuple (AfterTouch {chan, val}) (drop 2 ints)
+    pure $ Tuple (AfterTouch { chan, val }) (drop 2 ints)
 
 parseCC :: Parser MidiEvent
 parseCC ints = note "parseCC failed" do
@@ -226,11 +294,6 @@ parseNoteOff ints = note "parseNoteOff failed" do
     key <- index ints 1
     vel <- index ints 2
     pure $ Tuple (NoteOff { chan, key, vel }) (drop 3 ints)
-
-parseSysEx :: Parser Event
-parseSysEx ints = do
-    Tuple len rest <- parseVarLenNum ints
-    pure $ Tuple (SysexEvent len) (drop len rest)
 
 parseSeqSpec :: Parser MetaEvent
 parseSeqSpec ints = do
@@ -422,8 +485,8 @@ type PitchWheelChange =
     , pos :: Int
     }
 
-type AfterTouchVal = 
-    {chan :: Int
+type AfterTouchVal =
+    { chan :: Int
     , val :: Int
     }
 
