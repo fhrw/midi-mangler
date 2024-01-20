@@ -14,5 +14,8 @@
     "test": "spago test",
     "serve": "esbuild --bundle --outfile=dev/index.js --watch index.js",
     "build-prod": "rm -rf prod && mkdir -p prod && cp dev/index.html prod/ && spago bundle-app --to prod/index.js && parcel build prod/index.html"
+  },
+  "dependencies": {
+    "purs-tidy": "^0.10.1"
   }
 }
