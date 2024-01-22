@@ -44,10 +44,47 @@ trackName track = do
     str <- f name
     pure str
 
+toAbsolute :: Track -> Track
+toAbsolute track =
+    let
+        e = A.foldl
+            ( \z ele ->
+                let newTime d = z.curTime + d in
+                case ele of
+                    MidiEvent (NoteOn r) d -> z {events = A.snoc z.events (MidiEvent (NoteOff r) (newTime d)), curTime = newTime d}
+                    MidiEvent (NoteOff r) d -> z {events = A.snoc z.events (MidiEvent (NoteOff r) (newTime d)), curTime = newTime d} 
+                    MidiEvent PolyKeyPress d -> z {events = A.snoc z.events (MidiEvent PolyKeyPress (newTime d)), curTime = newTime d} 
+                    MidiEvent (CC r) d -> z {events = A.snoc z.events (MidiEvent (CC r) (newTime d)), curTime = newTime d} 
+                    MidiEvent ProgChange d -> z {events = A.snoc z.events (MidiEvent ProgChange (newTime d)), curTime = newTime d} 
+                    MidiEvent (AfterTouch r) d -> z {events = A.snoc z.events (MidiEvent (AfterTouch r) (newTime d)), curTime = newTime d} 
+                    MidiEvent (PitchWheel r) d -> z {events = A.snoc z.events (MidiEvent (PitchWheel r) (newTime d)), curTime = newTime d} 
+                    MidiEvent ChanMode d -> z {events = A.snoc z.events (MidiEvent ChanMode (newTime d)), curTime = newTime d} 
+                    MetaEvent (SeqNum n) d -> z {events = A.snoc z.events (MetaEvent (SeqNum n) (newTime d)), curTime = newTime d}
+                    MetaEvent (Text str) d -> z {events = A.snoc z.events (MetaEvent (Text str) (newTime d)), curTime = newTime d}
+                    MetaEvent (Copyright str) d -> z {events = A.snoc z.events (MetaEvent (Copyright str) (newTime d)), curTime = newTime d}
+                    MetaEvent (TrackName str) d -> z {events = A.snoc z.events (MetaEvent (TrackName str) (newTime d)), curTime = newTime d}
+                    MetaEvent (InstName str) d -> z {events = A.snoc z.events (MetaEvent (InstName str) (newTime d)), curTime = newTime d}
+                    MetaEvent (Lyric str) d -> z {events = A.snoc z.events (MetaEvent (Lyric str) (newTime d)), curTime = newTime d}
+                    MetaEvent (Marker str) d -> z {events = A.snoc z.events (MetaEvent (Marker str) (newTime d)), curTime = newTime d}
+                    MetaEvent (CuePoint str) d -> z {events = A.snoc z.events (MetaEvent (CuePoint str) (newTime d)), curTime = newTime d}
+                    MetaEvent (ChannelPrefix n) d -> z {events = A.snoc z.events (MetaEvent (ChannelPrefix n) (newTime d)), curTime = newTime d}
+                    MetaEvent EndOfTrack d -> z {events = A.snoc z.events (MetaEvent EndOfTrack (newTime d)), curTime = newTime d}
+                    MetaEvent (Tempo n) d -> z {events = A.snoc z.events (MetaEvent (Tempo n) (newTime d)), curTime = newTime d}
+                    MetaEvent (SmpteOffset r) d -> z {events = A.snoc z.events (MetaEvent (SmpteOffset r) (newTime d)), curTime = newTime d}
+                    MetaEvent (TimeSigEv r) d -> z {events = A.snoc z.events (MetaEvent (TimeSigEv r) (newTime d)), curTime = newTime d}
+                    MetaEvent (KeySigEv r) d -> z {events = A.snoc z.events (MetaEvent (KeySigEv r) (newTime d)), curTime = newTime d}
+                    MetaEvent SeqSpec d -> z {events = A.snoc z.events (MetaEvent SeqSpec (newTime d)), curTime = newTime d}
+                    MetaEvent UnknownMeta d -> z {events = A.snoc z.events (MetaEvent UnknownMeta (newTime d)), curTime = newTime d}
+            )
+            { events: [], curTime: 0 }
+            track.events
+    in
+        track { events = e.events }
+
 type Note = { on :: Int, off :: Int, key :: Int, vel :: Int, chan :: Int }
 
-trackNotes :: Track -> Array Note
-trackNotes track =
+notesInTrack :: Track -> Array Note
+notesInTrack track =
     let
         notes = A.foldl
             ( \z e ->
@@ -56,19 +93,21 @@ trackNotes track =
                   in
                       case e of
                           MidiEvent (NoteOn r) _ ->
-                              let key = {key: r.key, chan: r.chan} in
-                              if M.member key z.q then newZ
-                              else newZ { q = M.insert key {on: newZ.curTime, vel: r.vel} newZ.q }
+                              let
+                                  key = { key: r.key, chan: r.chan }
+                              in
+                                  if M.member key z.q then newZ
+                                  else newZ { q = M.insert key { on: newZ.curTime, vel: r.vel } newZ.q }
                           MidiEvent (NoteOff r) _ ->
                               let
-                                  key = {key: r.key, chan: r.chan}
+                                  key = { key: r.key, chan: r.chan }
                                   on = M.lookup key newZ.q
                               in
                                   case on of
                                       Nothing -> newZ
                                       Just val -> newZ
                                           { q = M.delete key newZ.q
-                                          , notes = A.snoc newZ.notes {on: val.on, off: newZ.curTime, key: key.key, chan: key.chan, vel: val.vel} 
+                                          , notes = A.snoc newZ.notes { on: val.on, off: newZ.curTime, key: key.key, chan: key.chan, vel: val.vel }
                                           }
                           _ -> z { curTime = z.curTime + (eventDelta e) }
             )
