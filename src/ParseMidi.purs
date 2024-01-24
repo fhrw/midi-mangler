@@ -41,42 +41,6 @@ trackName track = do
     str <- f name
     pure str
 
--- should be an AbsoluteMidiFile - would be a lot better if this was enforced
-fileTimeSigs :: MidiFile -> Either String (M.Map Int Event)
-fileTimeSigs file = note "whoops: bad file" do
-    track <- A.index file.tracks 0
-    let
-        sigs = A.filter
-            ( \x -> case x of
-                  MetaEvent (TimeSigEv _) _ -> true
-                  _ -> false
-            )
-            track.events
-    endEv <- A.find
-        ( \x -> case x of
-              MetaEvent (EndOfTrack) _ -> true
-              _ -> false
-        )
-        track.events
-    case sigs of
-        [] ->
-            let
-                nBars = (eventTime endEv) / 4
-                bars = A.range 0 nBars
-            in
-                pure $ A.foldl
-                    ( \z x ->
-                        let event = MetaEvent (TimeSigEv {nn: 4, dd: 4, bb: 0, cc: 0}) (x*(4*480)) in
-                        M.insert x event z
-                    )
-                    (M.empty)
-                    bars
-        _ -> pure $ M.empty
-    where
-    eventTime :: Event -> TimeVal
-    eventTime (MidiEvent (_) d) = d
-    eventTime (MetaEvent (_) d) = d
-
 type Note = { on :: Int, off :: Int, key :: Int, vel :: Int, chan :: Int }
 
 notesInTrack :: Track -> Array Note

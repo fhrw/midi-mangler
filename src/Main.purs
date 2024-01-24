@@ -17,7 +17,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import ParseMidi (MidiFile, notesInTrack, parseFile, toAbsolute, trackName)
+import ParseMidi (MidiFile,  notesInTrack, parseFile, toAbsolute, trackName)
 import Web.Event.Event (Event)
 
 type State =
@@ -101,7 +101,7 @@ handleAction = case _ of
             Right (Tuple midi rem) -> do
                 log $ show midi
                 log $ show rem
-                H.modify_ \st -> st { mMidiFile = Just (midi {tracks = map toAbsolute midi.tracks}) }
+                H.modify_ \st -> st { mMidiFile = Just (midi { tracks = map toAbsolute midi.tracks }) }
 
 foreign import readFileFromFilePickEvent
     :: { just :: forall a. a -> Maybe a
