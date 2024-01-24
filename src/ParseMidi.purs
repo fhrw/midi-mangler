@@ -20,6 +20,32 @@ import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Tuple (Tuple(..))
 
+---------------
+-- TRANSFORM --
+---------------
+
+type IState =
+    { timeM :: Map BarNum TimeSig
+    , musicTracks :: Array MusicTrack
+    }
+
+type BarNum = Int
+
+type TimeSig =
+    { num :: Int
+    , denom :: Int
+    }
+
+type MusicTrack =
+    { noteEvents :: Array Note
+    , otherEvents :: Array Event
+    }
+
+type PassageR = {bars :: Array BarNum, tNum :: Int}
+
+toIState :: MidiFile -> IState
+toIState file = {timeM: Map.empty, musicTracks: []}
+
 ----------------
 -- EVALUATION --
 ----------------
