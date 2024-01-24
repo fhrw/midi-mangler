@@ -17,7 +17,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import ParseMidi (MidiFile,  notesInTrack, parseFile, toAbsolute, trackName)
+import ParseMidi (MidiFile, notesInTrack, parseFile, toAbsolute, trackName)
 import Web.Event.Event (Event)
 
 type State =
@@ -50,7 +50,7 @@ render :: forall m. State -> H.ComponentHTML Action () m
 render state = do
     HH.div_
         [ HH.h1_
-              [ HH.text "MIDI Mangler" ]
+              [ HH.text "QuickClean" ]
         , foo state
         , HH.form_
               [ HH.input
