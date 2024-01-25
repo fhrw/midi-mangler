@@ -66,13 +66,13 @@ foo st = do
     case st.mMidiFile of
         Nothing -> HH.p_ [ HH.text "" ]
         Just file -> HH.div_
-            [ HH.p_
+            [ HH.p_ [ HH.text $ show file.header ]
+            , HH.p_
                   [ HH.text $ fromMaybe "" do
-                        track <- A.index file.tracks 0
+                        track <- A.index file.tracks 1
                         name <- trackName track
                         pure name
                   ]
-            , HH.p_ [ HH.text $ show file.header ]
             , HH.p_
                   [ HH.text $ fromMaybe "" do
                         track <- A.index file.tracks 2
