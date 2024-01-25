@@ -5,7 +5,7 @@ import Prelude
 import Bits (combine2, combine3)
 import Control.Monad.Rec.Class (Step(..), tailRec)
 import Control.MonadPlus (guard)
-import Data.Array (cons, drop, head, index, mapMaybe, snoc, take, (!!))
+import Data.Array (cons, drop, head, index, length, mapMaybe, snoc, take, (!!))
 import Data.Array as A
 import Data.Char (fromCharCode)
 import Data.Either (Either(..), note)
@@ -25,26 +25,72 @@ import Data.Tuple (Tuple(..))
 ---------------
 
 type IState =
-    { timeM :: Map BarNum TimeSig
+    { timeM :: SignatureMap
     , musicTracks :: Array MusicTrack
     }
 
-type BarNum = Int
+type SignatureMap = M.Map BarNum TimeSig
 
-type TimeSig =
-    { num :: Int
-    , denom :: Int
-    }
+type BarNum = Int
 
 type MusicTrack =
     { noteEvents :: Array Note
     , otherEvents :: Array Event
     }
 
-type PassageR = {bars :: Array BarNum, tNum :: Int}
-
 toIState :: MidiFile -> IState
-toIState file = {timeM: Map.empty, musicTracks: []}
+toIState file =
+    { timeM: M.empty
+    , musicTracks: map toMusicTrack file.tracks
+    }
+
+toMusicTrack :: Track -> MusicTrack
+toMusicTrack track =
+    { noteEvents: notesInTrack track
+    , otherEvents: A.filter
+          ( \x ->
+                case x of
+                    MidiEvent (NoteOn _) _ -> false
+                    MidiEvent (NoteOff _) _ -> false
+                    _ -> true
+          )
+          track.events
+    }
+
+sigMap :: MidiFile -> Either String SignatureMap
+sigMap file = do
+    let absFile = file { tracks = map toAbsolute file.tracks }
+    metaTrack <- absFile.tracks !! 0 # note "oh no"
+    endEvent <-
+        A.find
+            ( \x ->
+                  case x of
+                      MetaEvent EndOfTrack _ -> true
+                      _ -> false
+            )
+            metaTrack.events # note "oh no"
+    let
+        sigs = getSigs metaTrack
+        ranges = sigRanges { arr: sigs, curT: 0 } []
+    Left "haha"
+    where
+    sigRanges
+        :: { arr :: Array Event
+           , curT :: Int
+           }
+        -> Array (Tuple Int Int)
+        -> Array (Tuple Int Int)
+    sigRanges r res =
+        case A.uncons r.arr of
+            Nothing -> res
+            Just { head, tail } -> sigRanges
+                { arr: tail
+                , curT: r.curT + eventTime head
+                }
+                (A.snoc res (Tuple r.curT (r.curT + eventTime head)))
+    getSigs :: MidiFile -> Array Event
+    getSigs file =
+        
 
 ----------------
 -- EVALUATION --
@@ -75,7 +121,7 @@ notesInTrack track =
         notes = A.foldl
             ( \z e ->
                   let
-                      newZ = z { curTime = z.curTime + eventDelta e }
+                      newZ = z { curTime = z.curTime + eventTime e }
                   in
                       case e of
                           MidiEvent (NoteOn r) _ ->
@@ -95,7 +141,7 @@ notesInTrack track =
                                           { q = M.delete key newZ.q
                                           , notes = A.snoc newZ.notes { on: val.on, off: newZ.curTime, key: key.key, chan: key.chan, vel: val.vel }
                                           }
-                          _ -> z { curTime = z.curTime + (eventDelta e) }
+                          _ -> z { curTime = z.curTime + (eventTime e) }
             )
             { q: M.empty
             , curTime: 0
@@ -104,10 +150,14 @@ notesInTrack track =
             track.events
     in
         notes.notes
-    where
-    eventDelta :: Event -> TimeVal
-    eventDelta (MidiEvent (_) d) = d
-    eventDelta (MetaEvent (_) d) = d
+
+getTimeSigR :: Event -> Maybe TimeSig
+getTimeSigR (MetaEvent (TimeSigEv r) _) = Just r
+getTimeSigR _ = Nothing
+
+eventTime :: Event -> TimeVal
+eventTime (MidiEvent (_) d) = d
+eventTime (MetaEvent (_) d) = d
 
 -- this sucks
 toAbsolute :: Track -> Track
