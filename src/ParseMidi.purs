@@ -57,7 +57,7 @@ toMusicTrack track =
           track.events
     }
 
-sigMap :: MidiFile -> Either String SignatureMap
+sigMap :: MidiFile -> Either String (M.Map (Tuple Int Int) Event)
 sigMap file = do
     let absFile = file { tracks = map toAbsolute file.tracks }
     metaTrack <- absFile.tracks !! 0 # note "oh no"
@@ -70,10 +70,26 @@ sigMap file = do
             )
             metaTrack.events # note "oh no"
     let
-        sigs = getSigs metaTrack
+        sigs = getSigs metaTrack.events
         ranges = sigRanges { arr: sigs, curT: 0 } []
-    Left "haha"
+        rangeMap = A.foldl
+            ( \z c ->
+               let curSig = sigs !! z.i in  
+                case curSig of
+                    Just sig -> z {m = M.insert c sig z.m, i = z.i+1}
+                    Nothing -> z {i = z.i+1}
+            )
+            { m: M.empty, i: 0 }
+            ranges
+    pure $ rangeMap.m
     where
+    barLen :: {q :: Int, ts :: TimeSig} -> Either String Int
+    barLen r =  case r.ts.nn, r.ts.dd of
+        min, 2 -> pure $ (r.q*2) * min
+        quart, 4 -> pure $ r.q * quart
+        quav, 8 -> pure $ (r.q /2) * quav
+        semi, 16 -> pure $ (r.q /4) * semi
+        _, _ -> Left "bad time sig"
     sigRanges
         :: { arr :: Array Event
            , curT :: Int
@@ -88,9 +104,16 @@ sigMap file = do
                 , curT: r.curT + eventTime head
                 }
                 (A.snoc res (Tuple r.curT (r.curT + eventTime head)))
-    getSigs :: MidiFile -> Array Event
-    getSigs file =
-        
+
+    getSigs :: Array Event -> Array Event
+    getSigs meta =
+        A.filter
+            ( \x ->
+                  case x of
+                      MetaEvent (TimeSigEv _) _ -> true
+                      _ -> false
+            )
+            meta
 
 ----------------
 -- EVALUATION --
