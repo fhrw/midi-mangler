@@ -17,7 +17,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import ParseMidi (MidiFile, notesInTrack, parseFile, toAbsolute, trackName)
+import ParseMidi (MidiFile, notesInTrack, parseFile, sigMap, toAbsolute, trackName)
 import Web.Event.Event (Event)
 
 type State =
@@ -79,6 +79,8 @@ foo st = do
                         let notes = notesInTrack track
                         pure $ show notes
                   ]
+            , HH.p_
+                [HH.text $ show $ sigMap file]
             ]
 
 ----------
