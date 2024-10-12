@@ -5,7 +5,7 @@ import Prelude
 import Bits (combine2, combine3)
 import Control.Monad.Rec.Class (Step(..), tailRec)
 import Control.MonadPlus (guard)
-import Data.Array (cons, drop, head, index, length, mapMaybe, snoc, take, (!!))
+import Data.Array (cons, drop, head, index, mapMaybe, snoc, take, (!!))
 import Data.Array as A
 import Data.Char (fromCharCode)
 import Data.Either (Either(..), note)
@@ -27,6 +27,7 @@ import Data.Tuple (Tuple(..))
 type IState =
     { timeM :: SignatureMap
     , musicTracks :: Array MusicTrack
+    , header :: FileHeader
     }
 
 type SignatureMap = M.Map BarNum TimeSig
@@ -42,6 +43,7 @@ toIState :: MidiFile -> IState
 toIState file =
     { timeM: M.empty
     , musicTracks: map toMusicTrack file.tracks
+    , header: file.header
     }
 
 toMusicTrack :: Track -> MusicTrack
@@ -81,8 +83,9 @@ sigMap file = do
             )
             { m: M.empty, i: 0 }
             ranges
-    pure $ rangeMap.m
+    pure rangeMap.m
     where
+
     barLen :: {q :: Int, ts :: TimeSig} -> Either String Int
     barLen r =  case r.ts.nn, r.ts.dd of
         min, 2 -> pure $ (r.q*2) * min
@@ -90,6 +93,7 @@ sigMap file = do
         quav, 8 -> pure $ (r.q /2) * quav
         semi, 16 -> pure $ (r.q /4) * semi
         _, _ -> Left "bad time sig"
+
     sigRanges
         :: { arr :: Array Event
            , curT :: Int
@@ -182,7 +186,6 @@ eventTime :: Event -> TimeVal
 eventTime (MidiEvent (_) d) = d
 eventTime (MetaEvent (_) d) = d
 
--- this sucks
 toAbsolute :: Track -> Track
 toAbsolute track =
     let
@@ -192,30 +195,8 @@ toAbsolute track =
                       newTime d = z.curTime + d
                   in
                       case ele of
-                          MidiEvent (NoteOn r) d -> z { events = A.snoc z.events (MidiEvent (NoteOn r) (newTime d)), curTime = newTime d }
-                          MidiEvent (NoteOff r) d -> z { events = A.snoc z.events (MidiEvent (NoteOff r) (newTime d)), curTime = newTime d }
-                          MidiEvent PolyKeyPress d -> z { events = A.snoc z.events (MidiEvent PolyKeyPress (newTime d)), curTime = newTime d }
-                          MidiEvent (CC r) d -> z { events = A.snoc z.events (MidiEvent (CC r) (newTime d)), curTime = newTime d }
-                          MidiEvent ProgChange d -> z { events = A.snoc z.events (MidiEvent ProgChange (newTime d)), curTime = newTime d }
-                          MidiEvent (AfterTouch r) d -> z { events = A.snoc z.events (MidiEvent (AfterTouch r) (newTime d)), curTime = newTime d }
-                          MidiEvent (PitchWheel r) d -> z { events = A.snoc z.events (MidiEvent (PitchWheel r) (newTime d)), curTime = newTime d }
-                          MidiEvent ChanMode d -> z { events = A.snoc z.events (MidiEvent ChanMode (newTime d)), curTime = newTime d }
-                          MetaEvent (SeqNum n) d -> z { events = A.snoc z.events (MetaEvent (SeqNum n) (newTime d)), curTime = newTime d }
-                          MetaEvent (Text str) d -> z { events = A.snoc z.events (MetaEvent (Text str) (newTime d)), curTime = newTime d }
-                          MetaEvent (Copyright str) d -> z { events = A.snoc z.events (MetaEvent (Copyright str) (newTime d)), curTime = newTime d }
-                          MetaEvent (TrackName str) d -> z { events = A.snoc z.events (MetaEvent (TrackName str) (newTime d)), curTime = newTime d }
-                          MetaEvent (InstName str) d -> z { events = A.snoc z.events (MetaEvent (InstName str) (newTime d)), curTime = newTime d }
-                          MetaEvent (Lyric str) d -> z { events = A.snoc z.events (MetaEvent (Lyric str) (newTime d)), curTime = newTime d }
-                          MetaEvent (Marker str) d -> z { events = A.snoc z.events (MetaEvent (Marker str) (newTime d)), curTime = newTime d }
-                          MetaEvent (CuePoint str) d -> z { events = A.snoc z.events (MetaEvent (CuePoint str) (newTime d)), curTime = newTime d }
-                          MetaEvent (ChannelPrefix n) d -> z { events = A.snoc z.events (MetaEvent (ChannelPrefix n) (newTime d)), curTime = newTime d }
-                          MetaEvent EndOfTrack d -> z { events = A.snoc z.events (MetaEvent EndOfTrack (newTime d)), curTime = newTime d }
-                          MetaEvent (Tempo n) d -> z { events = A.snoc z.events (MetaEvent (Tempo n) (newTime d)), curTime = newTime d }
-                          MetaEvent (SmpteOffset r) d -> z { events = A.snoc z.events (MetaEvent (SmpteOffset r) (newTime d)), curTime = newTime d }
-                          MetaEvent (TimeSigEv r) d -> z { events = A.snoc z.events (MetaEvent (TimeSigEv r) (newTime d)), curTime = newTime d }
-                          MetaEvent (KeySigEv r) d -> z { events = A.snoc z.events (MetaEvent (KeySigEv r) (newTime d)), curTime = newTime d }
-                          MetaEvent SeqSpec d -> z { events = A.snoc z.events (MetaEvent SeqSpec (newTime d)), curTime = newTime d }
-                          MetaEvent UnknownMeta d -> z { events = A.snoc z.events (MetaEvent UnknownMeta (newTime d)), curTime = newTime d }
+                          MidiEvent t d -> z {events = A.snoc z.events (MidiEvent t (newTime d)), curTime = newTime d}
+                          MetaEvent t d -> z {events = A.snoc z.events (MetaEvent t (newTime d)), curTime = newTime d}
             )
             { events: [], curTime: 0 }
             track.events
