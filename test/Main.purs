@@ -4,7 +4,7 @@ import Prelude
 
 import Effect (Effect)
 import Effect.Class.Console (log)
-import Test.ParseMidi (individualParserTests)
+import Test.Parser (individualParserTests)
 
 main :: Effect Unit
 main = do

@@ -1,48 +1,85 @@
-module Test.ParseMidi where
+module Test.Parser where
 
 import Prelude
 
+import Control.Monad.Except (runExceptT)
+import Control.Monad.State (evalStateT)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..))
+import Data.Newtype (unwrap)
 import Effect (Effect)
-import ParseMidi (parseFileHeader, parseVarLenNum)
-import Test.Unit (suite, test)
+import Parser (ParseError(..), parseHeader, parseVarLen, readUint16)
+import Test.Unit (test)
 import Test.Unit.Assert as Assert
 import Test.Unit.Main (runTest)
 
 individualParserTests :: Effect Unit
 individualParserTests = do
     runTest do
-        suite "parse variable length" do
-            test "parseVarLenNum: read single number" do
+            test "parseFileHeader: read valid header chunk" do
                 let
-                    expected = Right $ Tuple 1 []
-                    input = [ 1 ]
-                Assert.equal expected (parseVarLenNum input)
-            test "parseVarLenNum: read longer number" do
-                let
-                    expected = Right $ Tuple 0x3FFF []
-                    input = [ 0xff, 0x7F ]
-                Assert.equal expected (parseVarLenNum input)
-            test "parseVarLenNum: read longest number" do
-                let
-                    expected = Right $ Tuple 0xFFFFFFF []
-                    input = [ 0xff, 0xff, 0xff, 0x7F ]
-                Assert.equal expected (parseVarLenNum input)
-            test "parseVarLenNum: should fail if illegal length" do
-                let
-                    expected = Left "variable length exceeded allowed length"
-                    input = [ 0xff, 0xff, 0xff, 0xff, 0xff ]
-                Assert.equal expected (parseVarLenNum input)
-            test "parseFileHeader: read valid file header chunk" do
-                let
-                    expected = Just $ Tuple { format: 1, nTracks: 332, division: 480 } []
-                    input = [77, 84, 104, 100, 0, 0, 0, 6, 0, 1, 1, 76, 1, 224 ]
-                Assert.equal expected (parseFileHeader input)
+                    expected = Right { format: 1, nTracks: 332, division: 480 }
+                    input = [ 77, 84, 104, 100, 0, 0, 0, 6, 0, 1, 1, 76, 1, 224 ]
+                Assert.equal expected
+                    ( unwrap
+                          $ runExceptT
+                          $ evalStateT parseHeader { file: input, pos: 0 }
+                    )
             test "parseFileHeader: read invalid header chunk" do
                 let
-                    expected = Nothing
-                    input = [ 77, 84, 104, 100, 0, 0, 0, 6, 0, 1, 1, 76, 129, 224 ]
-                Assert.equal expected (parseFileHeader input)
-
+                    expected = Left MissingMThd
+                    input = [ 78, 84, 104, 100, 0, 1, 0, 6, 0, 1, 1, 76, 129, 224 ]
+                Assert.equal expected
+                    ( unwrap
+                          $ runExceptT
+                          $ evalStateT parseHeader { file: input, pos: 0 }
+                    )
+            test "parseUint16: read uint correctly" do
+                let
+                    expected = Right 1
+                    input = [ 0, 1 ]
+                Assert.equal expected (unwrap $ runExceptT $ evalStateT readUint16 { file: input, pos: 0 })
+            test "parseUint16: read non-uint should be error" do
+                let
+                    expected = Left $ GenericError "didn't find unsigned uint16"
+                    input = [ 128, 1 ]
+                Assert.equal expected
+                    ( unwrap
+                          $ runExceptT
+                          $ evalStateT readUint16 { file: input, pos: 0 }
+                    )
+            test "parseUint16: empty arr is err" do
+                let
+                    expected = Left $ GenericError "failed to read byte!"
+                    input = [ 1 ]
+                Assert.equal expected
+                    ( unwrap
+                          $ runExceptT
+                          $ evalStateT readUint16 { file: input, pos: 0 }
+                    )
+            test "parseVarLen: read single digit" do
+                let
+                    expected = Right 1
+                    input = [ 1 ]
+                Assert.equal expected
+                    ( unwrap
+                          $ runExceptT
+                          $ evalStateT parseVarLen { file: input, pos: 0 }
+                    )
+            test "parseVarLen: read long num" do
+                let
+                    expected = Right 0xFFFFFFF 
+                    input = [ 0xff, 0xff, 0xff, 0x7F ]
+                Assert.equal expected
+                    ( unwrap
+                          $ runExceptT
+                          $ evalStateT parseVarLen { file: input, pos: 0 }
+                    )
+            test "parseVarLen: read diff num" do
+                let
+                    expected = Right 129 
+                    input = [129, 1]
+                Assert.equal expected
+                    ( unwrap
+                          $ runExceptT
+                          $ evalStateT parseVarLen { file: input, pos: 0 }
+                    )
