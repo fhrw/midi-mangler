@@ -20,7 +20,9 @@ to generate this file without the comments in this block.
   , "dom-indexed"
   , "effect"
   , "either"
+  , "foldable-traversable"
   , "halogen"
+  , "identity"
   , "integers"
   , "lists"
   , "maybe"
@@ -34,7 +36,9 @@ to generate this file without the comments in this block.
   , "strings"
   , "tailrec"
   , "test-unit"
+  , "transformers"
   , "tuples"
+  , "unfoldable"
   , "web-events"
   ]
 , packages = ./packages.dhall

@@ -2,22 +2,24 @@ module Main where
 
 import Prelude
 
+import Control.Monad.Except (runExceptT)
+import Control.Monad.State (evalStateT)
 import DOM.HTML.Indexed.InputAcceptType (InputAcceptType(..), InputAcceptTypeAtom(..))
 import Data.Array as A
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Tuple (Tuple(..))
+import Data.Newtype (unwrap)
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
-import Effect.Class.Console (log)
 import Halogen as H
 import Halogen.Aff (awaitBody, runHalogenAff)
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import ParseMidi (MidiFile, notesInTrack, parseFile, sigMap, toAbsolute, trackName)
+import MidiTypes (MidiFile)
+import StateParser (parseFile)
 import Web.Event.Event (Event)
 
 type State =
@@ -50,7 +52,7 @@ render :: forall m. State -> H.ComponentHTML Action () m
 render state = do
     HH.div_
         [ HH.h1_
-              [ HH.text "QuickClean" ]
+              [ HH.text "QuickClean foo" ]
         , foo state
         , HH.form_
               [ HH.input
@@ -66,21 +68,8 @@ foo st = do
     case st.mMidiFile of
         Nothing -> HH.p_ [ HH.text "" ]
         Just file -> HH.div_
-            [ HH.p_ [ HH.text $ show file.header ]
-            , HH.p_
-                  [ HH.text $ fromMaybe "" do
-                        track <- A.index file.tracks 1
-                        name <- trackName track
-                        pure name
-                  ]
-            , HH.p_
-                  [ HH.text $ fromMaybe "" do
-                        track <- A.index file.tracks 2
-                        let notes = notesInTrack track
-                        pure $ show notes
-                  ]
-            , HH.p_
-                [HH.text $ show $ sigMap file]
+            [ HH.p_ [ HH.text $ show $ A.length file.tracks ]
+            , HH.p_ [ HH.text $ show file ]
             ]
 
 ----------
@@ -97,13 +86,11 @@ handleAction = case _ of
                   , nothing: Nothing
                   , event
                   }
-        let parsed = parseFile $ fromMaybe [] mFile
+        let parsed = unwrap $ runExceptT $ evalStateT parseFile { file: (fromMaybe [] mFile), pos: 0 }
         case parsed of
             Left _ -> pure unit
-            Right (Tuple midi rem) -> do
-                log $ show midi
-                log $ show rem
-                H.modify_ \st -> st { mMidiFile = Just (midi { tracks = map toAbsolute midi.tracks }) }
+            Right midi -> do
+                H.modify_ \st -> st { mMidiFile = Just (midi) }
 
 foreign import readFileFromFilePickEvent
     :: { just :: forall a. a -> Maybe a
