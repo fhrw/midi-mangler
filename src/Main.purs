@@ -19,7 +19,7 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
 import MidiTypes (MidiFile)
-import StateParser (parseFile)
+import StateParser (parseFile, runParser)
 import Web.Event.Event (Event)
 
 type State =
@@ -86,7 +86,7 @@ handleAction = case _ of
                   , nothing: Nothing
                   , event
                   }
-        let parsed = unwrap $ runExceptT $ evalStateT parseFile { file: (fromMaybe [] mFile), pos: 0 }
+        let parsed = runParser { file: (fromMaybe [] mFile), pos: 0 }
         case parsed of
             Left _ -> pure unit
             Right midi -> do

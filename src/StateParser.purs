@@ -5,8 +5,8 @@ import Prelude
 import Bits (combine2, combine3, combine4)
 import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
-import Control.Monad.Except (ExceptT)
-import Control.Monad.State (StateT, get, put)
+import Control.Monad.Except (ExceptT, runExceptT)
+import Control.Monad.State (StateT, get, put, evalStateT)
 import Control.MonadPlus (alt)
 import Data.Array (fromFoldable, index, length, mapMaybe, replicate)
 import Data.Char (fromCharCode)
@@ -16,6 +16,8 @@ import Data.Int (fromNumber, toNumber)
 import Data.Int.Bits (and, or, shl)
 import Data.List (List, manyRec)
 import Data.Maybe (Maybe(..))
+import Data.Either(Either)
+import Data.Newtype(unwrap)
 import Data.Number (pow)
 import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (sequence)
@@ -38,6 +40,9 @@ data ParseError
     | NoError
 
 type Parser = StateT ParserState (ExceptT ParseError Identity)
+
+runParser :: ParserState -> Either ParseError MidiFile 
+runParser = unwrap <<< runExceptT <<< evalStateT parseFile
 
 parseFile :: Parser MidiFile
 parseFile = do
